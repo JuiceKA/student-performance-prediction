@@ -107,7 +107,30 @@ def predict_student(data: StudentData):
             data.gioi_tinh
         ]])
 
-        # Goi mo hinh du doan
+        # ============================================================
+        # QUY TAC CUONG: Diem chuyen can < 5 => TU DONG TRUOT
+        # Bat ke ket qua AI, neu chuyen can duoi 5 la khong du dieu kien
+        # ============================================================
+        if chuyen_can_auto < 5:
+            return {
+                "prediction":      0,
+                "probability":     [1.0, 0.0],
+                "prob_pass":       0.0,
+                "prob_fail":       100.0,
+                "risk_level":      "Rat cao",
+                "advice":          f"TRUOT bat buoc: Diem chuyen can chi dat {chuyen_can_auto:.1f}/10 (duoi 5.0). Sinh vien bi truot do khong du dieu kien chuyen can, bat ke diem thi.",
+                "chuyen_can_auto": chuyen_can_auto,
+                "rule_applied":    "CHUYEN_CAN_FAIL",
+                "input": {
+                    "buoi_vang":  data.buoi_vang,
+                    "chuyen_can": chuyen_can_auto,
+                    "giua_ky":    data.giua_ky,
+                    "cuoi_ky":    data.cuoi_ky,
+                    "gioi_tinh":  "Nam" if data.gioi_tinh == 1 else "Nu"
+                }
+            }
+
+        # Goi mo hinh du doan (chi chay khi chuyen can >= 5)
         prediction  = model.predict(input_data)
         probability = model.predict_proba(input_data)[0].tolist()
 
