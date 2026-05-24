@@ -16,41 +16,55 @@ random.seed(42)
 np.random.seed(42)
 
 # ============================================================
-# TẠO DỮ LIỆU MẪU (Giả lập dữ liệu lịch sử sinh viên)
+# TẠO/TẢI DỮ LIỆU HUẤN LUYỆN TỪ FILE CSV
 # ============================================================
-# Trong thực tế, bạn hãy thay phần này bằng dữ liệu thực của mình
-# Cac dac trung: [chuyen_can_auto, giua_ky, cuoi_ky, buoi_vang, gioi_tinh]
-# Nhan: 1 = Dat (Pass), 0 = Truot (Fail)
-# Quy tac: chuyen_can_auto = max(0, 10 - buoi_vang)
-# Trong so: cuoi_ky(50%) + giua_ky(30%) + chuyen_can(20%)
+import pandas as pd
+import os
 
-def generate_student_data(n_samples=1000):
-    data = []
-    labels = []
+CSV_FILE = "data_sinh_vien.csv"
 
-    for _ in range(n_samples):
-        buoi_vang       = int(np.random.randint(0, 16))       # So buoi vang: 0-15
-        chuyen_can_auto = max(0.0, 10.0 - buoi_vang)          # Tu tinh: 10 - buoi vang
-        giua_ky         = round(np.random.uniform(0, 10), 1)  # Diem giua ky: 0-10
-        cuoi_ky         = round(np.random.uniform(0, 10), 1)  # Diem cuoi ky: 0-10
-        gioi_tinh       = int(np.random.randint(0, 2))        # Gioi tinh: 0 hoac 1
+def load_or_generate_data():
+    if not os.path.exists(CSV_FILE):
+        print(f"[*] Khong tim thay {CSV_FILE}. Dang tao file excel (csv) mau voi 1000 sinh vien...")
+        data = []
+        for _ in range(1000):
+            buoi_vang = int(np.random.randint(0, 16))
+            giua_ky = round(np.random.uniform(0, 10), 1)
+            cuoi_ky = round(np.random.uniform(0, 10), 1)
+            gioi_tinh = int(np.random.randint(0, 2))
+            
+            chuyen_can_auto = max(0.0, 10.0 - buoi_vang)
+            score = (chuyen_can_auto * 0.20 + giua_ky * 0.30 + cuoi_ky * 0.50)
+            noise = np.random.normal(0, 0.4)
+            ket_qua = 1 if (score + noise) >= 5 else 0
+            
+            data.append([buoi_vang, giua_ky, cuoi_ky, gioi_tinh, ket_qua])
+            
+        df = pd.DataFrame(data, columns=["buoi_vang", "giua_ky", "cuoi_ky", "gioi_tinh", "ket_qua"])
+        df.to_csv(CSV_FILE, index=False)
+        print(f"[OK] Da tao thanh cong file: {CSV_FILE}")
+        print(f"[*] Ban co the mo file nay bang Excel, sua doi du lieu va chay lai de Train AI!")
+        
+    print(f"\n[*] Dang doc du lieu tu file: {CSV_FILE}")
+    df = pd.read_csv(CSV_FILE)
+    
+    # Kiem tra cac cot bat buoc
+    required_cols = ["buoi_vang", "giua_ky", "cuoi_ky", "gioi_tinh", "ket_qua"]
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"[Loi] Thieu cot '{col}' trong file CSV!")
+            
+    # Tu dong tinh diem chuyen can tu so buoi vang (de khop voi logic tren web)
+    df["chuyen_can_auto"] = df["buoi_vang"].apply(lambda x: max(0.0, 10.0 - x))
+    
+    # Sap xep dung thu tu dac trung ma web dang dung:
+    # [chuyen_can_auto, giua_ky, cuoi_ky, buoi_vang, gioi_tinh]
+    X = df[["chuyen_can_auto", "giua_ky", "cuoi_ky", "buoi_vang", "gioi_tinh"]].values
+    y = df["ket_qua"].values
+    
+    return X, y
 
-        # Trong so: cuoi_ky(50%) > giua_ky(30%) > chuyen_can(20%)
-        score = (chuyen_can_auto * 0.20
-               + giua_ky         * 0.30
-               + cuoi_ky         * 0.50)
-
-        # Them nhieu ngau nhien
-        noise = np.random.normal(0, 0.4)
-        passed = 1 if (score + noise) >= 5 else 0
-
-        data.append([chuyen_can_auto, giua_ky, cuoi_ky, buoi_vang, gioi_tinh])
-        labels.append(passed)
-
-    return np.array(data), np.array(labels)
-
-print("[*] Dang tao du lieu mau...")
-X, y = generate_student_data(1000)
+X, y = load_or_generate_data()
 
 # Chia tập dữ liệu
 X_train, X_test, y_train, y_test = train_test_split(
