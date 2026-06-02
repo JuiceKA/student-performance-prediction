@@ -1,12 +1,13 @@
-/* =============================================
-   APP.JS - EduPredict Frontend Logic
-   ============================================= */
+/* ==========================================================
+   APP.JS — EduPredict v2.0 Frontend Logic
+   Ket qua 3 muc: H (Tot), M (Kha), L (Yeu)
+   ========================================================== */
 
-const API_BASE = "http://localhost:8000";
-const HISTORY_KEY = "edupredict_history";
+const API_BASE    = "http://localhost:8000";
+const HISTORY_KEY = "edupredict_history_v2";
 
 let lastPrediction = null;
-let lastFormData = null;
+let lastFormData   = null;
 
 /* ==========================================
    SERVER STATUS CHECK
@@ -17,39 +18,19 @@ async function checkServerStatus() {
     try {
         const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
-            dot.className   = "status-dot online";
+            dot.className    = "status-dot online";
             text.textContent = "Server online";
         } else { throw new Error(); }
     } catch {
-        dot.className   = "status-dot offline";
+        dot.className    = "status-dot offline";
         text.textContent = "Server offline";
     }
 }
-
 checkServerStatus();
 setInterval(checkServerStatus, 10000);
 
-
 /* ==========================================
-   CAP NHAT DIEM CHUYEN CAN TU TINH
-   ========================================== */
-function updateChuyenCan() {
-    const buoiVang = parseInt(document.getElementById("buoi_vang").value) || 0;
-    const cc = Math.max(0, 10 - buoiVang);
-
-    document.getElementById("chuyenCanValue").textContent = cc.toFixed(1);
-    document.getElementById("chuyenCanFill").style.width  = (cc / 10 * 100) + "%";
-
-    // Doi mau theo muc do
-    const valEl = document.getElementById("chuyenCanValue");
-    if (cc >= 7)       valEl.style.color = "var(--pass-color)";
-    else if (cc >= 5)  valEl.style.color = "var(--accent-2)";
-    else               valEl.style.color = "var(--fail-color)";
-}
-
-
-/* ==========================================
-   SLIDER ↔ INPUT SYNC
+   SLIDER <-> NUMBER INPUT SYNC
    ========================================== */
 function syncSlider(fieldId, maxVal) {
     const input  = document.getElementById(fieldId);
@@ -57,13 +38,12 @@ function syncSlider(fieldId, maxVal) {
     const fill   = document.getElementById(`fill_${fieldId}`);
     if (!slider || !fill) return;
 
-    let val = parseFloat(input.value);
+    let val = parseInt(input.value);
     if (isNaN(val)) val = 0;
     val = Math.min(maxVal, Math.max(0, val));
-
+    input.value  = val;
     slider.value = val;
-    const pct = (val / maxVal) * 100;
-    fill.style.width = pct + "%";
+    fill.style.width = (val / maxVal * 100) + "%";
 }
 
 function syncInput(fieldId, maxVal) {
@@ -73,18 +53,14 @@ function syncInput(fieldId, maxVal) {
     if (!input || !fill) return;
 
     input.value = slider.value;
-    const pct = (parseFloat(slider.value) / maxVal) * 100;
-    fill.style.width = pct + "%";
+    fill.style.width = (parseInt(slider.value) / maxVal * 100) + "%";
 }
 
-// Init fill bars on load
 window.addEventListener("load", () => {
-    syncSlider("buoi_vang", 15);
-    syncSlider("giua_ky",   10);
-    syncSlider("cuoi_ky",   10);
-    updateChuyenCan();
+    syncSlider("phat_bieu", 100);
+    syncSlider("tai_lieu",  100);
+    syncSlider("thong_bao", 100);
 });
-
 
 /* ==========================================
    MAIN PREDICTION FUNCTION
@@ -92,37 +68,32 @@ window.addEventListener("load", () => {
 async function layDuDoan(event) {
     if (event) event.preventDefault();
 
-    const buoiVang = parseInt(document.getElementById("buoi_vang").value);
-    const giuaKy   = parseFloat(document.getElementById("giua_ky").value);
-    const cuoiKy   = parseFloat(document.getElementById("cuoi_ky").value);
-    const gioiTinh = parseInt(document.querySelector('input[name="gioi_tinh"]:checked').value);
+    const phatBieu = parseInt(document.getElementById("phat_bieu").value);
+    const taiLieu  = parseInt(document.getElementById("tai_lieu").value);
+    const thongBao = parseInt(document.getElementById("thong_bao").value);
+    const nghiHoc  = parseInt(document.getElementById("nghi_hoc").value);
 
     // Validate
-    if (isNaN(buoiVang) || isNaN(giuaKy) || isNaN(cuoiKy)) {
-        showToast("⚠️ Vui long nhap day du thong tin!", "warn");
-        return;
-    }
-    if (buoiVang < 0 || buoiVang > 15) {
-        showToast("⚠️ So buoi vang phai trong khoang 0 - 15!", "warn");
-        return;
-    }
-    if (giuaKy < 0 || giuaKy > 10 || cuoiKy < 0 || cuoiKy > 10) {
-        showToast("⚠️ Diem giua ky/cuoi ky phai trong khoang 0 - 10!", "warn");
+    if (isNaN(phatBieu) || isNaN(taiLieu) || isNaN(thongBao)) {
+        showToast("Vui long nhap day du thong tin!", "warn");
         return;
     }
 
-    // Store for retry
-    lastFormData = { buoi_vang: buoiVang, giua_ky: giuaKy, cuoi_ky: cuoiKy, gioi_tinh: gioiTinh };
+    lastFormData = {
+        phat_bieu: phatBieu,
+        tai_lieu:  taiLieu,
+        thong_bao: thongBao,
+        nghi_hoc:  nghiHoc
+    };
 
-    // UI: show loading
     setLoading(true);
-    hideAll();
+    hideResult();
 
     try {
         const response = await fetch(`${API_BASE}/predict`, {
-            method: "POST",
+            method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(lastFormData)
+            body:    JSON.stringify(lastFormData)
         });
 
         if (!response.ok) {
@@ -147,68 +118,91 @@ async function layDuDoan(event) {
 /* ==========================================
    RENDER RESULT
    ========================================== */
+const LEVEL_CONFIG = {
+    "H": { emoji: "🌟", bannerClass: "green-banner", textClass: "green-text", badgeClass: "green-badge" },
+    "M": { emoji: "📘", bannerClass: "yellow-banner", textClass: "yellow-text", badgeClass: "yellow-badge" },
+    "L": { emoji: "⚠️",  bannerClass: "red-banner",    textClass: "red-text",   badgeClass: "red-badge"   }
+};
+
 function renderResult(result) {
-    const isPass  = result.prediction === 1;
-    const probPass = result.prob_pass ?? (result.probability[1] * 100).toFixed(2);
-    const probFail = result.prob_fail ?? (result.probability[0] * 100).toFixed(2);
+    const level   = result.prediction;
+    const cfg     = LEVEL_CONFIG[level] || LEVEL_CONFIG["M"];
+    const dt      = result.decision_tree || {};
+    const nb      = result.naive_bayes   || {};
+    const isAgree = result.dong_thuan;
 
-    // Banner
+    // ---- Banner tổng hợp ----
     const banner = document.getElementById("resultBanner");
-    banner.className = "result-banner " + (isPass ? "pass-banner" : "fail-banner");
-    document.getElementById("bannerIcon").textContent    = isPass ? "🎉" : "⚠️";
-    document.getElementById("bannerVerdict").textContent = isPass ? "ĐẠT" : "TRƯỢT";
-    document.getElementById("bannerProb").textContent    =
-        isPass
-            ? `Xác suất đạt: ${probPass}%`
-            : `Xác suất trượt: ${probFail}%`;
+    banner.className = "result-banner " + cfg.bannerClass;
+    document.getElementById("bannerIcon").textContent    = cfg.emoji;
+    document.getElementById("bannerVerdict").textContent = `Mức ${level}`;
+    document.getElementById("bannerVerdict").className   = "banner-verdict " + cfg.textClass;
+    document.getElementById("bannerLabel").textContent   = result.ten_muc || "";
 
-    // Gauge circles
-    const CIRCUMFERENCE = 2 * Math.PI * 40; // 251.2
-    animateGauge("arcPass", parseFloat(probPass), CIRCUMFERENCE);
-    animateGauge("arcFail", parseFloat(probFail), CIRCUMFERENCE);
-    document.getElementById("numPass").textContent = parseFloat(probPass).toFixed(1);
-    document.getElementById("numFail").textContent = parseFloat(probFail).toFixed(1);
+    const agreeTag = document.getElementById("agreeTag");
+    agreeTag.textContent = isAgree ? "✅ 2/2 Đồng thuận" : "⚠️ Khác biệt → Dùng DT";
+    agreeTag.className   = "agree-tag " + (isAgree ? "agree" : "disagree");
 
-    // Risk
-    const riskMap = {
-        "Thấp":    { cls: "risk-low",    emoji: "🟢" },
-        "Trung bình": { cls: "risk-medium", emoji: "🟡" },
-        "Cao":     { cls: "risk-high",   emoji: "🔴" },
-        "Rất cao": { cls: "risk-high",   emoji: "🔴" }
-    };
-    const riskInfo = riskMap[result.risk_level] || { cls: "risk-medium", emoji: "⚠️" };
-    const riskLevelEl = document.getElementById("riskLevel");
-    riskLevelEl.textContent = result.risk_level || "—";
-    riskLevelEl.className   = "risk-level " + riskInfo.cls;
-    document.getElementById("riskAdvice").textContent = result.advice || "";
+    // ---- Decision Tree card ----
+    renderAlgoCard("dt", dt);
 
-    // Summary
+    // ---- Naive Bayes card ----
+    renderAlgoCard("nb", nb);
+
+    // Highlight card thắng (chinh xac hon)
+    const dtAcc = parseFloat(dt.do_chinh_xac) || 0;
+    const nbAcc = parseFloat(nb.do_chinh_xac) || 0;
+    document.getElementById("dtCard").classList.toggle("winner", dtAcc >= nbAcc);
+    document.getElementById("nbCard").classList.toggle("winner", nbAcc > dtAcc);
+
+    // ---- Advice ----
+    document.getElementById("adviceText").textContent = result.loi_khuyen || "";
+    const riskBadge = document.getElementById("riskBadge");
+    riskBadge.textContent = result.canh_bao || "";
+    riskBadge.className   = "risk-badge " + cfg.badgeClass;
+
+    // ---- Summary ----
     const inp = result.input || lastFormData;
-    const cc  = result.chuyen_can_auto ?? Math.max(0, 10 - (inp.buoi_vang || 0));
-    document.getElementById("sumBuoiVang").textContent  = (inp.buoi_vang ?? "—") + " buoi";
-    document.getElementById("sumChuyenCan").textContent = cc.toFixed(1) + "/10";
-    document.getElementById("sumGiuaKy").textContent    = inp.giua_ky    ?? "—";
-    document.getElementById("sumCuoiKy").textContent    = inp.cuoi_ky    ?? "—";
-    document.getElementById("sumGioiTinh").textContent  =
-        typeof inp.gioi_tinh === "string" ? inp.gioi_tinh
-        : (inp.gioi_tinh === 1 ? "Nam" : "Nu");
+    document.getElementById("sumPhatBieu").textContent = (inp.phat_bieu ?? "—") + " lần";
+    document.getElementById("sumTaiLieu").textContent  = (inp.tai_lieu  ?? "—") + " lần";
+    document.getElementById("sumThongBao").textContent = (inp.thong_bao ?? "—") + " lần";
+    document.getElementById("sumNghiHoc").textContent  =
+        typeof inp.nghi_hoc === "string" ? inp.nghi_hoc
+        : (inp.nghi_hoc === 1 ? "Above-7 (Trên 7 ngày)" : "Under-7 (≤ 7 ngày)");
 
-    // Show content
+    // Show
     document.getElementById("resultContent").classList.remove("hidden");
     document.getElementById("resultPlaceholder").classList.add("hidden");
     document.getElementById("resultError").classList.add("hidden");
 }
 
-function animateGauge(arcId, percent, circumference) {
-    const arc = document.getElementById(arcId);
-    const offset = circumference - (percent / 100) * circumference;
-    // Start hidden then animate
-    arc.style.strokeDashoffset = circumference;
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            arc.style.strokeDashoffset = offset;
-        });
-    });
+function renderAlgoCard(prefix, algoData) {
+    const xacSuat = algoData.xac_suat || {};
+    const level   = algoData.prediction || "—";
+    const cfg     = LEVEL_CONFIG[level];
+
+    document.getElementById(`${prefix}Acc`).textContent =
+        algoData.do_chinh_xac ? `Độ chính xác: ${algoData.do_chinh_xac}` : "—";
+
+    const badge = document.getElementById(`${prefix}Badge`);
+    badge.textContent = level !== "—" ? `Mức ${level}` : "—";
+    badge.className   = cfg ? `algo-badge ${cfg.badgeClass}` : "algo-badge";
+
+    animateProbBar(`${prefix}FillH`, `${prefix}NumH`, xacSuat["H"] ?? 0);
+    animateProbBar(`${prefix}FillM`, `${prefix}NumM`, xacSuat["M"] ?? 0);
+    animateProbBar(`${prefix}FillL`, `${prefix}NumL`, xacSuat["L"] ?? 0);
+}
+
+function animateProbBar(fillId, numId, percent) {
+    const fill = document.getElementById(fillId);
+    const num  = document.getElementById(numId);
+    if (!fill || !num) return;
+
+    fill.style.width = "0%";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        fill.style.width = percent + "%";
+    }));
+    num.textContent = percent.toFixed(1) + "%";
 }
 
 /* ==========================================
@@ -221,11 +215,11 @@ function renderError(msg) {
 
     const errEl = document.getElementById("errorMsg");
     if (msg && msg.toLowerCase().includes("fetch")) {
-        errEl.innerHTML = `Không thể kết nối tới máy chủ Backend.<br>
-            Hãy đảm bảo server đang chạy tại <code>http://localhost:8000</code>.<br><br>
-            Chạy lệnh: <code>uvicorn main:app --reload</code>`;
+        errEl.innerHTML = `Khong the ket noi toi may chu Backend.<br>
+            Dam bao server dang chay tai <code>http://localhost:8000</code>.<br><br>
+            Chay: <code>start_server.bat</code>`;
     } else {
-        errEl.textContent = `Lỗi: ${msg}`;
+        errEl.textContent = `Loi: ${msg}`;
     }
 }
 
@@ -233,50 +227,38 @@ function renderError(msg) {
    HISTORY
    ========================================== */
 function loadHistory() {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); }
+    catch { return []; }
 }
 
-function saveHistory(history) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 20)));
+function saveHistory(h) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 20)));
 }
 
 function addToHistory(result) {
     const history = loadHistory();
-    const isPass  = result.prediction === 1;
-    const probPass = result.prob_pass ?? (result.probability[1] * 100).toFixed(2);
-    const inp     = result.input || lastFormData;
-    const cc      = result.chuyen_can_auto ?? Math.max(0, 10 - (inp.buoi_vang || 0));
-
+    const inp = result.input || lastFormData;
     history.unshift({
-        verdict:    isPass ? "DAT" : "TRUOT",
-        isPass,
-        probPass:   parseFloat(probPass).toFixed(1),
-        buoiVang:   inp.buoi_vang,
-        chuyenCan:  cc.toFixed(1),
-        giuaKy:     inp.giua_ky,
-        cuoiKy:     inp.cuoi_ky,
-        gioiTinh:   typeof inp.gioi_tinh === "string" ? inp.gioi_tinh : (inp.gioi_tinh === 1 ? "Nam" : "Nu"),
-        time:       new Date().toLocaleTimeString("vi-VN"),
-        date:       new Date().toLocaleDateString("vi-VN")
+        level:     result.prediction,
+        tenMuc:    result.ten_muc,
+        phatBieu:  inp.phat_bieu,
+        taiLieu:   inp.tai_lieu,
+        thongBao:  inp.thong_bao,
+        nghiHoc:   typeof inp.nghi_hoc === "string" ? inp.nghi_hoc : (inp.nghi_hoc === 1 ? "Above-7 (Tren 7 ngay)" : "Under-7 (<= 7 ngay)"),
+        time:      new Date().toLocaleTimeString("vi-VN"),
+        date:      new Date().toLocaleDateString("vi-VN")
     });
-
     saveHistory(history);
     renderHistory();
 }
 
 function renderHistory() {
-    const history    = loadHistory();
-    const listEl     = document.getElementById("historyList");
-    const clearBtn   = document.getElementById("clearHistoryBtn");
+    const history  = loadHistory();
+    const listEl   = document.getElementById("historyList");
+    const clearBtn = document.getElementById("clearHistoryBtn");
 
     if (!history.length) {
-        listEl.innerHTML = `
-            <div class="history-empty">
-                <span>📭</span>
-                <p>Chưa có lịch sử dự đoán. Hãy thực hiện dự đoán đầu tiên!</p>
-            </div>`;
+        listEl.innerHTML = `<div class="history-empty"><span>📭</span><p>Chua co lich su du doan. Hay thuc hien du doan dau tien!</p></div>`;
         clearBtn.classList.add("hidden");
         return;
     }
@@ -284,14 +266,13 @@ function renderHistory() {
     clearBtn.classList.remove("hidden");
     listEl.innerHTML = history.map(h => `
         <div class="history-item">
-            <span class="h-verdict ${h.isPass ? 'pass' : 'fail'}">${h.verdict}</span>
+            <span class="h-level ${h.level}">${h.level}</span>
             <div class="h-details">
-                Vang: <strong>${h.buoiVang} buoi</strong> &nbsp;|&nbsp;
-                Chuyen can: <strong>${h.chuyenCan}/10</strong> &nbsp;|&nbsp;
-                Giua: <strong>${h.giuaKy}</strong> &nbsp;|&nbsp;
-                Cuoi: <strong>${h.cuoiKy}</strong> &nbsp;|&nbsp;
-                ${h.gioiTinh}
-                <span class="h-prob">${h.probPass}%</span>
+                <strong>${h.tenMuc || h.level}</strong> &nbsp;|&nbsp;
+                Phat bieu: <strong>${h.phatBieu}</strong> &nbsp;|&nbsp;
+                Tai lieu: <strong>${h.taiLieu}</strong> &nbsp;|&nbsp;
+                Thong bao: <strong>${h.thongBao}</strong> &nbsp;|&nbsp;
+                Nghi: <strong>${h.nghiHoc}</strong>
             </div>
             <div class="h-time">${h.time}<br/>${h.date}</div>
         </div>
@@ -301,36 +282,31 @@ function renderHistory() {
 function clearHistory() {
     localStorage.removeItem(HISTORY_KEY);
     renderHistory();
-    showToast("🗑 Đã xóa lịch sử!");
+    showToast("Da xoa lich su!");
 }
 
-// Load history on start
 renderHistory();
 
 /* ==========================================
    RESET FORM
    ========================================== */
 function resetForm() {
-    document.getElementById("predictForm").reset();
-    document.getElementById("buoi_vang").value = "2";
-    document.getElementById("giua_ky").value   = "7.0";
-    document.getElementById("cuoi_ky").value   = "7.5";
-    document.getElementById("gender_male").checked = true;
+    document.getElementById("phat_bieu").value = "50";
+    document.getElementById("tai_lieu").value  = "60";
+    document.getElementById("thong_bao").value = "40";
+    document.getElementById("nghi_hoc").value  = "0";
 
-    syncSlider("buoi_vang", 15);
-    syncSlider("giua_ky",   10);
-    syncSlider("cuoi_ky",   10);
-    updateChuyenCan();
+    syncSlider("phat_bieu", 100);
+    syncSlider("tai_lieu",  100);
+    syncSlider("thong_bao", 100);
 
-    hideAll();
+    hideResult();
     document.getElementById("resultPlaceholder").classList.remove("hidden");
     lastPrediction = null;
 }
 
 function retryPredict() {
-    if (lastFormData) {
-        layDuDoan(null);
-    }
+    if (lastFormData) layDuDoan(null);
 }
 
 /* ==========================================
@@ -338,52 +314,33 @@ function retryPredict() {
    ========================================== */
 function copyResult() {
     if (!lastPrediction) return;
-    const isPass  = lastPrediction.prediction === 1;
-    const probPass = lastPrediction.prob_pass ?? (lastPrediction.probability[1] * 100).toFixed(2);
-    const probFail = lastPrediction.prob_fail ?? (lastPrediction.probability[0] * 100).toFixed(2);
-    const inp     = lastPrediction.input || lastFormData;
-
+    const inp = lastPrediction.input || lastFormData;
     const text = [
-        "=== KẾT QUẢ DỰ ĐOÁN SINH VIÊN ===",
-        `Kết quả: ${isPass ? "ĐẠT ✅" : "TRƯỢT ❌"}`,
-        `Xác suất đạt: ${probPass}%`,
-        `Xác suất trượt: ${probFail}%`,
-        `Mức rủi ro: ${lastPrediction.risk_level}`,
+        "=== KET QUA DU DOAN HOC TAP SINH VIEN ===",
+        `Muc: ${lastPrediction.prediction} — ${lastPrediction.ten_muc}`,
+        `Canh bao: ${lastPrediction.canh_bao}`,
         "---",
-        `Chuyên cần: ${inp.chuyen_can}`,
-        `Giữa kỳ:   ${inp.giua_ky}`,
-        `Giờ LMS:   ${inp.gio_lms}h`,
-        `Giới tính: ${typeof inp.gioi_tinh === "string" ? inp.gioi_tinh : (inp.gioi_tinh === 1 ? "Nam" : "Nữ")}`,
+        `Phat bieu:  ${inp.phat_bieu} lan`,
+        `Tai lieu:   ${inp.tai_lieu} lan`,
+        `Thong bao:  ${inp.thong_bao} lan`,
+        `Nghi hoc:   ${typeof inp.nghi_hoc === "string" ? inp.nghi_hoc : (inp.nghi_hoc === 1 ? "Above-7 (Tren 7 ngay)" : "Under-7 (<= 7 ngay)")}`,
         "---",
-        `Lời khuyên: ${lastPrediction.advice}`,
-        `Thời gian: ${new Date().toLocaleString("vi-VN")}`
+        `Loi khuyen: ${lastPrediction.loi_khuyen}`,
+        `Thoi gian: ${new Date().toLocaleString("vi-VN")}`
     ].join("\n");
 
     navigator.clipboard.writeText(text)
-        .then(() => showToast("✅ Đã sao chép kết quả!"))
-        .catch(() => showToast("❌ Không thể sao chép", "warn"));
-}
-
-/* ==========================================
-   TOAST NOTIFICATION
-   ========================================== */
-function showToast(msg, type = "success") {
-    const toast = document.getElementById("toast");
-    const toastMsg = document.getElementById("toastMsg");
-    toastMsg.textContent = msg;
-    toast.style.background = type === "warn"
-        ? "rgba(245,158,11,0.9)"
-        : "rgba(16,185,129,0.9)";
-    toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 3000);
+        .then(() => showToast("Da sao chep ket qua!"))
+        .catch(() => showToast("Khong the sao chep", "warn"));
 }
 
 /* ==========================================
    HELPERS
    ========================================== */
-function hideAll() {
+function hideResult() {
     document.getElementById("resultContent").classList.add("hidden");
     document.getElementById("resultError").classList.add("hidden");
+    document.getElementById("resultPlaceholder").classList.add("hidden");
 }
 
 function setLoading(isLoading) {
@@ -400,44 +357,15 @@ function scrollToResult() {
 }
 
 /* ==========================================
-   ACTIVE NAV ON SCROLL
+   TOAST
    ========================================== */
-const sections = [
-    { id: "hero",            nav: "nav-home" },
-    { id: "predict-section", nav: "nav-predict" },
-    { id: "about",           nav: "nav-about" }
-];
-
-window.addEventListener("scroll", () => {
-    const scrollY = window.scrollY + 120;
-    sections.forEach(({ id, nav }) => {
-        const section = document.getElementById(id);
-        const navLink = document.getElementById(nav);
-        if (!section || !navLink) return;
-        const top    = section.offsetTop;
-        const bottom = top + section.offsetHeight;
-        navLink.classList.toggle("active", scrollY >= top && scrollY < bottom);
-    });
-}, { passive: true });
-
-/* ==========================================
-   INTERSECTION OBSERVER (animations)
-   ========================================== */
-const observer = new IntersectionObserver(
-    (entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = "1";
-                entry.target.style.transform = "translateY(0)";
-            }
-        });
-    },
-    { threshold: 0.15 }
-);
-
-document.querySelectorAll(".step-card, .feature, .tech-item").forEach(el => {
-    el.style.opacity = "0";
-    el.style.transform = "translateY(20px)";
-    el.style.transition = "opacity 0.5s ease, transform 0.5s ease";
-    observer.observe(el);
-});
+function showToast(msg, type = "success") {
+    const toast    = document.getElementById("toast");
+    const toastMsg = document.getElementById("toastMsg");
+    toastMsg.textContent = msg;
+    toast.style.background = type === "warn"
+        ? "rgba(245,158,11,0.9)"
+        : "rgba(16,185,129,0.9)";
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 3000);
+}

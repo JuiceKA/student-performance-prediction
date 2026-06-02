@@ -3,328 +3,255 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Dự Đoán Kết Quả Sinh Viên | EduPredict</title>
-    <meta name="description" content="Hệ thống dự đoán kết quả học tập sinh viên sử dụng trí tuệ nhân tạo - Machine Learning" />
+    <title>EduPredict — Cảnh Báo Học Vụ Sớm</title>
+    <meta name="description" content="Hệ thống dự đoán kết quả học tập sinh viên theo 3 mức H/M/L bằng thuật toán Decision Tree." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<!-- ===== BACKGROUND ANIMATION ===== -->
-<div class="bg-orbs">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-</div>
+<!-- ===== TOAST ===== -->
+<div id="toast" class="toast"><span id="toastMsg"></span></div>
 
-<!-- ===== HEADER ===== -->
-<header class="header" id="header">
-    <div class="header-inner">
-        <div class="logo">
-            <div class="logo-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                    <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-                </svg>
-            </div>
-            <span class="logo-text">EduPredict <span class="logo-ai">AI</span></span>
-        </div>
-        <div class="server-status" id="serverStatus">
-            <span class="status-dot" id="statusDot"></span>
-            <span id="statusText">Đang kết nối...</span>
-        </div>
+<!-- ===== NAV ===== -->
+<nav class="navbar">
+    <div class="nav-brand">
+        <span class="brand-icon">🎓</span>
+        <span class="brand-name">EduPredict</span>
+        <span class="brand-badge">AI v2.0</span>
     </div>
-</header>
+    <div class="nav-status">
+        <span id="statusDot" class="status-dot offline"></span>
+        <span id="statusText">Đang kết nối...</span>
+    </div>
+</nav>
 
-<!-- ===== PREDICT SECTION ===== -->
-<section class="predict-section" id="predict-section" style="padding-top: 100px;">
-    <div class="predict-container">
+<!-- ===== MAIN LAYOUT ===== -->
+<main class="main-layout">
 
-        <!-- LEFT: FORM -->
-        <div class="form-panel glass-card">
-            <div class="panel-header">
-                <div class="panel-icon">🎓</div>
-                <div>
-                    <h1 class="panel-title">Dự Đoán Kết Quả Sinh Viên</h1>
-                    <p class="panel-desc">Nhập đầy đủ thông tin để nhận kết quả chính xác nhất</p>
-                </div>
-            </div>
-
-            <form id="predictForm" onsubmit="layDuDoan(event)">
-
-                <!-- Số buổi vắng -->
-                <div class="form-group" id="group-buoi-vang">
-                    <label class="form-label" for="buoi_vang">
-                        <span class="label-icon">📅</span>
-                        Số Buổi Vắng
-                        <span class="label-range">0 – 15 buổi</span>
-                    </label>
-                    <div class="input-wrapper">
-                        <input
-                            type="number" id="buoi_vang" name="buoi_vang"
-                            class="form-input" placeholder="Ví dụ: 2"
-                            min="0" max="15" step="1" value="2" required
-                            oninput="syncSlider('buoi_vang', 15); updateChuyenCan()"
-                        />
-                        <input type="range" id="slider_buoi_vang" class="form-slider"
-                            min="0" max="15" step="1" value="2"
-                            oninput="syncInput('buoi_vang', 15); updateChuyenCan()"
-                        />
-                    </div>
-                    <div class="score-bar">
-                        <div class="score-fill" id="fill_buoi_vang" style="width:13%"></div>
-                    </div>
-                </div>
-
-                <!-- Điểm chuyên cần tự tính (read-only) -->
-                <div class="form-group auto-calc-group">
-                    <label class="form-label">
-                        <span class="label-icon">📋</span>
-                        Điểm Chuyên Cần (tự tính)
-                        <span class="label-badge">= 10 – Số buổi vắng</span>
-                    </label>
-                    <div class="auto-calc-display" id="chuyenCanDisplay">
-                        <span class="calc-value" id="chuyenCanValue">8.0</span>
-                        <span class="calc-unit">/10</span>
-                        <div class="calc-bar">
-                            <div class="calc-fill" id="chuyenCanFill" style="width:80%"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Điểm giữa kỳ -->
-                <div class="form-group" id="group-giua-ky">
-                    <label class="form-label" for="giua_ky">
-                        <span class="label-icon">📝</span>
-                        Điểm Thi Giữa Kỳ
-                        <span class="label-range">0.0 – 10.0</span>
-                    </label>
-                    <div class="input-wrapper">
-                        <input
-                            type="number" id="giua_ky" name="giua_ky"
-                            class="form-input" placeholder="Ví dụ: 7.0"
-                            min="0" max="10" step="0.1" value="7.0" required
-                            oninput="syncSlider('giua_ky', 10)"
-                        />
-                        <input type="range" id="slider_giua_ky" class="form-slider"
-                            min="0" max="10" step="0.1" value="7.0"
-                            oninput="syncInput('giua_ky', 10)"
-                        />
-                    </div>
-                    <div class="score-bar">
-                        <div class="score-fill" id="fill_giua_ky" style="width:70%"></div>
-                    </div>
-                </div>
-
-                <!-- Điểm cuối kỳ -->
-                <div class="form-group" id="group-cuoi-ky">
-                    <label class="form-label" for="cuoi_ky">
-                        <span class="label-icon">🎯</span>
-                        Điểm Thi Cuối Kỳ
-                        <span class="label-range">0.0 – 10.0</span>
-                    </label>
-                    <div class="input-wrapper">
-                        <input
-                            type="number" id="cuoi_ky" name="cuoi_ky"
-                            class="form-input" placeholder="Ví dụ: 7.5"
-                            min="0" max="10" step="0.1" value="7.5" required
-                            oninput="syncSlider('cuoi_ky', 10)"
-                        />
-                        <input type="range" id="slider_cuoi_ky" class="form-slider"
-                            min="0" max="10" step="0.1" value="7.5"
-                            oninput="syncInput('cuoi_ky', 10)"
-                        />
-                    </div>
-                    <div class="score-bar">
-                        <div class="score-fill" id="fill_cuoi_ky" style="width:75%"></div>
-                    </div>
-                </div>
-
-                <!-- Giới tính -->
-                <div class="form-group" id="group-gioi-tinh">
-                    <label class="form-label">
-                        <span class="label-icon">👤</span>
-                        Giới Tính
-                    </label>
-                    <div class="gender-toggle">
-                        <input type="radio" id="gender_male" name="gioi_tinh" value="1" checked />
-                        <label for="gender_male" class="gender-btn">
-                            <span>♂</span> Nam
-                        </label>
-                        <input type="radio" id="gender_female" name="gioi_tinh" value="0" />
-                        <label for="gender_female" class="gender-btn">
-                            <span>♀</span> Nữ
-                        </label>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-predict" id="predictBtn">
-                    <span class="btn-text" id="btnText">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                        Dự Đoán Kết Quả
-                    </span>
-                    <span class="btn-loading hidden" id="btnLoading">
-                        <span class="spinner"></span> Đang phân tích...
-                    </span>
-                </button>
-
-                <button type="button" class="btn-reset" id="resetBtn" onclick="resetForm()">
-                    ↺ Nhập lại
-                </button>
-
-            </form>
+    <!-- ===== INPUT PANEL ===== -->
+    <section class="input-panel" id="predict-section">
+        <div class="panel-header">
+            <h1>Dự Đoán Kết Quả Học Tập</h1>
+            <p>Nhập thông tin hoạt động học tập của sinh viên để hệ thống AI phân tích và đưa ra cảnh báo.</p>
         </div>
 
-        <!-- RIGHT: RESULT -->
-        <div class="result-panel" id="resultPanel">
+        <form id="predictForm" onsubmit="layDuDoan(event)" novalidate>
 
-            <!-- Placeholder khi chưa có kết quả -->
-            <div class="result-placeholder" id="resultPlaceholder">
-                <div class="placeholder-icon">🔮</div>
-                <h3>Kết quả sẽ hiển thị tại đây</h3>
-                <p>Điền thông tin sinh viên và nhấn "Dự Đoán Kết Quả" để xem kết quả AI phân tích.</p>
-                <div class="placeholder-tips">
-                    <div class="tip">💡 Điểm cuối kỳ ảnh hưởng 50%</div>
-                    <div class="tip">💡 Điểm giữa kỳ ảnh hưởng 30%</div>
-                    <div class="tip">💡 Điểm chuyên cần ảnh hưởng 20%</div>
+            <!-- Số lần phát biểu -->
+            <div class="input-group">
+                <label for="phat_bieu">
+                    <span class="label-icon">🙋</span>
+                    Số lần phát biểu
+                    <span class="label-hint">0 – 100 lần</span>
+                </label>
+                <div class="slider-row">
+                    <div class="slider-track">
+                        <div class="slider-fill" id="fill_phat_bieu"></div>
+                        <input type="range" id="slider_phat_bieu" min="0" max="100" value="50"
+                               oninput="syncInput('phat_bieu', 100)" />
+                    </div>
+                    <input type="number" id="phat_bieu" min="0" max="100" value="50"
+                           oninput="syncSlider('phat_bieu', 100)"
+                           onchange="syncSlider('phat_bieu', 100)" />
                 </div>
+                <div id="err_phat_bieu" class="field-error hidden">Vui lòng nhập từ 0 đến 100.</div>
             </div>
 
-            <!-- Kết quả sau khi predict -->
-            <div class="result-content hidden" id="resultContent">
-
-                <!-- Result Banner -->
-                <div class="result-banner" id="resultBanner">
-                    <div class="banner-icon" id="bannerIcon">🎉</div>
-                    <div class="banner-label" id="bannerLabel">DỰ ĐOÁN KẾT QUẢ</div>
-                    <div class="banner-verdict" id="bannerVerdict">ĐẠT</div>
-                    <div class="banner-prob" id="bannerProb">Xác suất: 87.5%</div>
+            <!-- Số lần truy cập tài liệu -->
+            <div class="input-group">
+                <label for="tai_lieu">
+                    <span class="label-icon">📚</span>
+                    Số lần truy cập tài liệu
+                    <span class="label-hint">0 – 100 lần</span>
+                </label>
+                <div class="slider-row">
+                    <div class="slider-track">
+                        <div class="slider-fill" id="fill_tai_lieu"></div>
+                        <input type="range" id="slider_tai_lieu" min="0" max="100" value="60"
+                               oninput="syncInput('tai_lieu', 100)" />
+                    </div>
+                    <input type="number" id="tai_lieu" min="0" max="100" value="60"
+                           oninput="syncSlider('tai_lieu', 100)"
+                           onchange="syncSlider('tai_lieu', 100)" />
                 </div>
+                <div id="err_tai_lieu" class="field-error hidden">Vui lòng nhập từ 0 đến 100.</div>
+            </div>
 
-                <!-- Probability Gauges -->
-                <div class="gauges-row glass-card">
-                    <div class="gauge-item">
-                        <div class="gauge-circle" id="gaugePass">
-                            <svg viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="40" class="gauge-bg"/>
-                                <circle cx="50" cy="50" r="40" class="gauge-arc pass-arc" id="arcPass"/>
-                            </svg>
-                            <div class="gauge-label">
-                                <span class="gauge-num" id="numPass">87.5</span>
-                                <span class="gauge-unit">%</span>
+            <!-- Số lần xem thông báo -->
+            <div class="input-group">
+                <label for="thong_bao">
+                    <span class="label-icon">🔔</span>
+                    Số lần xem thông báo
+                    <span class="label-hint">0 – 100 lần</span>
+                </label>
+                <div class="slider-row">
+                    <div class="slider-track">
+                        <div class="slider-fill" id="fill_thong_bao"></div>
+                        <input type="range" id="slider_thong_bao" min="0" max="100" value="40"
+                               oninput="syncInput('thong_bao', 100)" />
+                    </div>
+                    <input type="number" id="thong_bao" min="0" max="100" value="40"
+                           oninput="syncSlider('thong_bao', 100)"
+                           onchange="syncSlider('thong_bao', 100)" />
+                </div>
+                <div id="err_thong_bao" class="field-error hidden">Vui lòng nhập từ 0 đến 100.</div>
+            </div>
+
+            <!-- Số ngày nghỉ học (dropdown) -->
+            <div class="input-group">
+                <label for="nghi_hoc">
+                    <span class="label-icon">📅</span>
+                    Số ngày nghỉ học
+                </label>
+                <select id="nghi_hoc" class="select-input">
+                    <option value="0">✅ Từ 7 ngày trở xuống (Bình thường)</option>
+                    <option value="1">⚠️ Trên 7 ngày (Nghỉ nhiều)</option>
+                </select>
+            </div>
+
+            <!-- Nút Dự đoán -->
+            <button type="submit" id="predictBtn" class="predict-btn">
+                <span id="btnText">🔮 Tiến Hành Dự Đoán</span>
+                <span id="btnLoading" class="hidden">
+                    <span class="spinner"></span> Đang phân tích...
+                </span>
+            </button>
+
+            <!-- Nút Reset -->
+            <button type="button" class="reset-btn" onclick="resetForm()">↺ Nhập lại</button>
+
+        </form>
+    </section>
+
+    <!-- ===== RESULT PANEL ===== -->
+    <section class="result-panel" id="resultPanel">
+
+        <!-- Placeholder -->
+        <div id="resultPlaceholder" class="result-placeholder">
+            <div class="placeholder-icon">🤖</div>
+            <h3>Chờ dữ liệu phân tích</h3>
+            <p>Nhập thông tin học tập của sinh viên bên trái và nhấn nút <strong>"Tiến Hành Dự Đoán"</strong> để xem kết quả AI.</p>
+        </div>
+
+        <!-- Error -->
+        <div id="resultError" class="result-error hidden">
+            <div class="error-icon">⚡</div>
+            <h3>Không thể kết nối</h3>
+            <p id="errorMsg"></p>
+            <button onclick="retryPredict()" class="retry-btn">Thử lại</button>
+        </div>
+
+        <!-- Result Content -->
+        <div id="resultContent" class="hidden">
+
+            <!-- Banner phán quyết chung -->
+            <div id="resultBanner" class="result-banner">
+                <div class="banner-level" id="bannerIcon"></div>
+                <div class="banner-info">
+                    <div class="banner-verdict" id="bannerVerdict"></div>
+                    <div class="banner-label" id="bannerLabel"></div>
+                </div>
+                <div id="agreeTag" class="agree-tag"></div>
+            </div>
+
+            <!-- So sánh 2 thuật toán -->
+            <div class="algo-compare">
+                <h4 class="section-title">🧬 So Sánh 2 Thuật Toán</h4>
+                <div class="algo-grid">
+                    <!-- Decision Tree -->
+                    <div class="algo-card" id="dtCard">
+                        <div class="algo-header">
+                            <span class="algo-icon">🌳</span>
+                            <div>
+                                <div class="algo-name">Decision Tree</div>
+                                <div class="algo-acc" id="dtAcc">—</div>
                             </div>
+                            <span class="algo-badge" id="dtBadge"></span>
                         </div>
-                        <p class="gauge-title">✅ Đạt</p>
+                        <div class="algo-prob-row">
+                            <span class="prob-label green-label">H</span>
+                            <div class="prob-track"><div class="prob-fill green-fill" id="dtFillH"></div></div>
+                            <span class="prob-num" id="dtNumH">—</span>
+                        </div>
+                        <div class="algo-prob-row">
+                            <span class="prob-label yellow-label">M</span>
+                            <div class="prob-track"><div class="prob-fill yellow-fill" id="dtFillM"></div></div>
+                            <span class="prob-num" id="dtNumM">—</span>
+                        </div>
+                        <div class="algo-prob-row">
+                            <span class="prob-label red-label">L</span>
+                            <div class="prob-track"><div class="prob-fill red-fill" id="dtFillL"></div></div>
+                            <span class="prob-num" id="dtNumL">—</span>
+                        </div>
                     </div>
-                    <div class="gauge-divider"></div>
-                    <div class="gauge-item">
-                        <div class="gauge-circle" id="gaugeFail">
-                            <svg viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="40" class="gauge-bg"/>
-                                <circle cx="50" cy="50" r="40" class="gauge-arc fail-arc" id="arcFail"/>
-                            </svg>
-                            <div class="gauge-label">
-                                <span class="gauge-num" id="numFail">12.5</span>
-                                <span class="gauge-unit">%</span>
+
+                    <!-- Naive Bayes -->
+                    <div class="algo-card" id="nbCard">
+                        <div class="algo-header">
+                            <span class="algo-icon">📐</span>
+                            <div>
+                                <div class="algo-name">Naive Bayes</div>
+                                <div class="algo-acc" id="nbAcc">—</div>
                             </div>
+                            <span class="algo-badge" id="nbBadge"></span>
                         </div>
-                        <p class="gauge-title">❌ Trượt</p>
-                    </div>
-                </div>
-
-                <!-- Risk Level -->
-                <div class="risk-card glass-card" id="riskCard">
-                    <div class="risk-header">
-                        <span class="risk-badge" id="riskBadge">⚠️ Mức rủi ro</span>
-                        <span class="risk-level" id="riskLevel">Thấp</span>
-                    </div>
-                    <p class="risk-advice" id="riskAdvice">Sinh viên đang học tập tốt!</p>
-                </div>
-
-                <!-- Input Summary -->
-                <div class="summary-card glass-card">
-                    <h4 class="summary-title">📊 Dữ liệu đã phân tích</h4>
-                    <div class="summary-grid">
-                        <div class="summary-item">
-                            <span class="s-icon">📅</span>
-                            <span class="s-label">Buổi vắng</span>
-                            <span class="s-val" id="sumBuoiVang">—</span>
+                        <div class="algo-prob-row">
+                            <span class="prob-label green-label">H</span>
+                            <div class="prob-track"><div class="prob-fill green-fill" id="nbFillH"></div></div>
+                            <span class="prob-num" id="nbNumH">—</span>
                         </div>
-                        <div class="summary-item">
-                            <span class="s-icon">📋</span>
-                            <span class="s-label">Chuyên cần</span>
-                            <span class="s-val" id="sumChuyenCan">—</span>
+                        <div class="algo-prob-row">
+                            <span class="prob-label yellow-label">M</span>
+                            <div class="prob-track"><div class="prob-fill yellow-fill" id="nbFillM"></div></div>
+                            <span class="prob-num" id="nbNumM">—</span>
                         </div>
-                        <div class="summary-item">
-                            <span class="s-icon">📝</span>
-                            <span class="s-label">Giữa kỳ</span>
-                            <span class="s-val" id="sumGiuaKy">—</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="s-icon">🎯</span>
-                            <span class="s-label">Cuối kỳ</span>
-                            <span class="s-val" id="sumCuoiKy">—</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="s-icon">👤</span>
-                            <span class="s-label">Giới tính</span>
-                            <span class="s-val" id="sumGioiTinh">—</span>
+                        <div class="algo-prob-row">
+                            <span class="prob-label red-label">L</span>
+                            <div class="prob-track"><div class="prob-fill red-fill" id="nbFillL"></div></div>
+                            <span class="prob-num" id="nbNumL">—</span>
                         </div>
                     </div>
                 </div>
-
-                <!-- Actions -->
-                <div class="action-row">
-                    <button class="btn-action" onclick="copyResult()">📋 Sao chép kết quả</button>
-                    <button class="btn-action primary" onclick="resetForm()">+ Dự đoán mới</button>
-                </div>
-
             </div>
 
-            <!-- Error State -->
-            <div class="result-error hidden" id="resultError">
-                <div class="error-icon">⚠️</div>
-                <h3>Lỗi kết nối</h3>
-                <p id="errorMsg">Không thể kết nối tới máy chủ Backend. Hãy đảm bảo server đang chạy tại <code>http://localhost:8000</code></p>
-                <button class="btn-retry" onclick="retryPredict()">🔄 Thử lại</button>
+            <!-- Lời khuyên -->
+            <div class="advice-box">
+                <div class="advice-header">
+                    <span class="advice-icon">💡</span>
+                    <span>Lời Khuyên Học Vụ</span>
+                    <span class="risk-badge" id="riskBadge"></span>
+                </div>
+                <p id="adviceText"></p>
             </div>
 
+            <!-- Tóm tắt đầu vào -->
+            <div class="summary-box">
+                <h4 class="section-title">📋 Thông tin đã nhập</h4>
+                <div class="summary-grid">
+                    <div class="sum-item"><span class="sum-label">🙋 Phát biểu</span><span class="sum-val" id="sumPhatBieu">—</span></div>
+                    <div class="sum-item"><span class="sum-label">📚 Tài liệu</span><span class="sum-val" id="sumTaiLieu">—</span></div>
+                    <div class="sum-item"><span class="sum-label">🔔 Thông báo</span><span class="sum-val" id="sumThongBao">—</span></div>
+                    <div class="sum-item"><span class="sum-label">📅 Nghỉ học</span><span class="sum-val" id="sumNghiHoc">—</span></div>
+                </div>
+            </div>
+
+            <button class="copy-btn" onclick="copyResult()">📋 Sao chép kết quả</button>
         </div>
+
+    </section>
+
+</main>
+
+<!-- ===== HISTORY ===== -->
+<section class="history-section">
+    <div class="history-header">
+        <h2>📜 Lịch Sử Dự Đoán</h2>
+        <button id="clearHistoryBtn" class="clear-btn hidden" onclick="clearHistory()">🗑 Xóa lịch sử</button>
     </div>
+    <div id="historyList"></div>
 </section>
-
-<!-- ===== HISTORY SECTION ===== -->
-<section class="history-section" id="history-section">
-    <div class="section-header">
-        <p class="section-tag">Lịch sử</p>
-        <h2 class="section-title">Kết quả dự đoán gần đây</h2>
-    </div>
-    <div id="historyList" class="history-list">
-        <div class="history-empty">
-            <span>📭</span>
-            <p>Chưa có lịch sử dự đoán. Hãy thực hiện dự đoán đầu tiên!</p>
-        </div>
-    </div>
-    <button class="btn-clear-history hidden" id="clearHistoryBtn" onclick="clearHistory()">🗑 Xóa lịch sử</button>
-</section>
-
-<!-- ===== FOOTER ===== -->
-<footer class="footer">
-    <div class="footer-inner">
-        <div class="footer-brand">
-            <span class="logo-text">EduPredict <span class="logo-ai">AI</span></span>
-            <p>Hệ thống dự đoán kết quả học tập sinh viên</p>
-        </div>
-        <p class="footer-copy">© 2024 EduPredict. Được xây dựng với ❤️ bằng Python &amp; FastAPI.</p>
-    </div>
-</footer>
-
-<!-- ===== TOAST NOTIFICATION ===== -->
-<div class="toast" id="toast">
-    <span id="toastMsg">Đã sao chép!</span>
-</div>
 
 <script src="app.js"></script>
 </body>

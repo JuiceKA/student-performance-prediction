@@ -1,187 +1,164 @@
 """
-Backend FastAPI - Máy chủ xử lý dự đoán kết quả sinh viên
-Khởi động bằng lệnh: uvicorn main:app --reload
+Backend FastAPI - Du doan ket qua hoc tap sinh vien
+Chay song song ca 2 thuat toan: Decision Tree + Naive Bayes
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 import joblib
 import numpy as np
 import os
-from typing import Optional
+from collections import Counter
 
-# ============================================================
-# KHỞI TẠO ỨNG DỤNG
-# ============================================================
 app = FastAPI(
-    title="Student Prediction API",
-    description="API du doan ket qua hoc tap cua sinh vien bang Decision Tree",
-    version="2.0.0"
+    title="Student Performance Prediction API",
+    description="API du doan ket qua H/M/L bang Decision Tree + Naive Bayes",
+    version="3.0.0"
 )
 
-# Cho phép Frontend (chạy ở domain khác) gọi API này
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Trong thực tế, hãy thay bằng domain cụ thể
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ============================================================
-# TẢI MÔ HÌNH
+# TAI 2 MO HINH
 # ============================================================
 MODEL_PATH = "student_model.pkl"
 
 if not os.path.exists(MODEL_PATH):
-    raise RuntimeError(
-        f"❌ Không tìm thấy file mô hình '{MODEL_PATH}'!\n"
-        "👉 Hãy chạy lệnh: python train_model.py trước!"
-    )
+    raise RuntimeError(f"Khong tim thay '{MODEL_PATH}'! Hay chay: python train_model.py truoc!")
 
-model = joblib.load(MODEL_PATH)
-print(f"[OK] Da tai mo hinh tu: {MODEL_PATH}")
+model_data   = joblib.load(MODEL_PATH)
+dt_pipeline  = model_data["dt_pipeline"]
+nb_pipeline  = model_data["nb_pipeline"]
+le           = model_data["label_encoder"]
+dt_accuracy  = model_data.get("dt_accuracy", 0)
+nb_accuracy  = model_data.get("nb_accuracy", 0)
+
+print(f"[OK] Da tai 2 mo hinh tu: {MODEL_PATH}")
+print(f"     Decision Tree: {dt_accuracy}% | Naive Bayes: {nb_accuracy}%")
 
 # ============================================================
-# ĐỊNH NGHĨA DỮ LIỆU ĐẦU VÀO
+# DINH NGHIA INPUT
 # ============================================================
 class StudentData(BaseModel):
-    buoi_vang: int    = Field(..., ge=0, le=15, description="So buoi vang (0-15). Moi buoi vang tru 1 diem chuyen can")
-    giua_ky: float    = Field(..., ge=0, le=10, description="Diem thi giua ky (0-10)")
-    cuoi_ky: float    = Field(..., ge=0, le=10, description="Diem thi cuoi ky (0-10) - trong so cao nhat")
-    gioi_tinh: int    = Field(..., ge=0, le=1,  description="Gioi tinh: 1=Nam, 0=Nu")
+    phat_bieu: int = Field(..., ge=0, le=100, description="So lan phat bieu (0-100)")
+    tai_lieu:  int = Field(..., ge=0, le=100, description="So lan truy cap tai lieu (0-100)")
+    thong_bao: int = Field(..., ge=0, le=100, description="So lan xem thong bao (0-100)")
+    nghi_hoc:  int = Field(..., ge=0, le=1,  description="0=Under-7 (nghi duoi 7 ngay), 1=Above-7 (nghi tren 7 ngay)")
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "buoi_vang": 2,
-                "giua_ky": 7.0,
-                "cuoi_ky": 7.5,
-                "gioi_tinh": 1
-            }
+            "example": {"phat_bieu": 50, "tai_lieu": 60, "thong_bao": 40, "nghi_hoc": 0}
         }
     }
 
-
 # ============================================================
-# CÁC API ENDPOINT
+# BANG THONG TIN 3 MUC
 # ============================================================
+LEVEL_INFO = {
+    "H": {
+        "ten": "Tot - Xuat sac",
+        "mau": "green",
+        "canh_bao": "Thap",
+        "loi_khuyen": "Sinh vien dang hoc tap rat tot! Hay duy tri phong do va tiep tuc phat huy."
+    },
+    "M": {
+        "ten": "Kha - Trung binh",
+        "mau": "yellow",
+        "canh_bao": "Trung binh",
+        "loi_khuyen": "Sinh vien can co gang hon. Tang cuong xem tai lieu va tich cuc phat bieu tren lop."
+    },
+    "L": {
+        "ten": "Yeu - Canh bao hoc vu",
+        "mau": "red",
+        "canh_bao": "Cao - Can can thiep",
+        "loi_khuyen": "Canh bao hoc vu: Sinh vien co nguy co cao! Can lien he khan cap voi giang vien va co van hoc tap."
+    }
+}
 
-@app.get("/")
-def root():
-    """Kiểm tra server đang chạy"""
+def predict_with_model(pipeline, input_data):
+    """Chay du doan voi 1 pipeline, tra ve dict ket qua."""
+    pred_encoded = pipeline.predict(input_data)[0]
+    proba        = pipeline.predict_proba(input_data)[0].tolist()
+    label        = le.classes_[int(pred_encoded)]
+    info         = LEVEL_INFO[label]
+    xac_suat     = {le.classes_[i]: round(proba[i] * 100, 2) for i in range(len(le.classes_))}
+
     return {
-        "status": "✅ Server đang hoạt động",
-        "message": "Student Prediction API v1.0",
-        "docs": "/docs"
+        "prediction": label,
+        "ten_muc":    info["ten"],
+        "mau":        info["mau"],
+        "canh_bao":   info["canh_bao"],
+        "loi_khuyen": info["loi_khuyen"],
+        "xac_suat":   xac_suat,
     }
 
+def majority_vote(dt_label, nb_label):
+    """Bien phap: neu 2 thuat toan dong y thi tra ket qua do, neu khac biet thi lay Decision Tree (chinh xac hon)."""
+    if dt_label == nb_label:
+        return dt_label, True   # dong y
+    else:
+        return dt_label, False  # khac biet -> lay DT
+
+# ============================================================
+# API ENDPOINTS
+# ============================================================
+@app.get("/")
+def root():
+    return {"status": "Server online", "version": "3.0.0", "algorithms": ["Decision Tree", "Naive Bayes"]}
 
 @app.get("/health")
-def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "model_loaded": True}
-
+def health():
+    return {
+        "status": "healthy",
+        "models": {
+            "decision_tree": f"{dt_accuracy}%",
+            "naive_bayes":   f"{nb_accuracy}%"
+        }
+    }
 
 @app.post("/predict")
 def predict_student(data: StudentData):
     """
-    Du doan ket qua hoc tap bang Decision Tree.
-    - **buoi_vang**: So buoi vang (0-15). Moi buoi vang tru 1 diem chuyen can.
-    - **giua_ky**  : Diem thi giua ky (0-10) - trong so 30%
-    - **cuoi_ky**  : Diem thi cuoi ky (0-10) - trong so 50% (cao nhat)
-    - **gioi_tinh**: Gioi tinh (1: Nam, 0: Nu)
+    Du doan bang 2 thuat toan song song va tra ve ket qua so sanh.
     """
     try:
-        # Tu dong tinh diem chuyen can: moi buoi vang tru 1 diem
-        chuyen_can_auto = max(0.0, 10.0 - data.buoi_vang)
+        input_data = np.array([[data.phat_bieu, data.tai_lieu, data.thong_bao, data.nghi_hoc]])
 
-        # Dua vao model theo dung thu tu feature da train:
-        # [chuyen_can_auto, giua_ky, cuoi_ky, buoi_vang, gioi_tinh]
-        input_data = np.array([[
-            chuyen_can_auto,
-            data.giua_ky,
-            data.cuoi_ky,
-            data.buoi_vang,
-            data.gioi_tinh
-        ]])
+        # Chay ca 2 thuat toan
+        dt_result = predict_with_model(dt_pipeline, input_data)
+        nb_result = predict_with_model(nb_pipeline, input_data)
 
-        # ============================================================
-        # QUY TAC CUONG: Diem chuyen can < 5 => TU DONG TRUOT
-        # Bat ke ket qua AI, neu chuyen can duoi 5 la khong du dieu kien
-        # ============================================================
-        if chuyen_can_auto < 5:
-            return {
-                "prediction":      0,
-                "probability":     [1.0, 0.0],
-                "prob_pass":       0.0,
-                "prob_fail":       100.0,
-                "risk_level":      "Rat cao",
-                "advice":          f"TRUOT bat buoc: Diem chuyen can chi dat {chuyen_can_auto:.1f}/10 (duoi 5.0). Sinh vien bi truot do khong du dieu kien chuyen can, bat ke diem thi.",
-                "chuyen_can_auto": chuyen_can_auto,
-                "rule_applied":    "CHUYEN_CAN_FAIL",
-                "input": {
-                    "buoi_vang":  data.buoi_vang,
-                    "chuyen_can": chuyen_can_auto,
-                    "giua_ky":    data.giua_ky,
-                    "cuoi_ky":    data.cuoi_ky,
-                    "gioi_tinh":  "Nam" if data.gioi_tinh == 1 else "Nu"
-                }
-            }
-
-        # Goi mo hinh du doan (chi chay khi chuyen can >= 5)
-        prediction  = model.predict(input_data)
-        probability = model.predict_proba(input_data)[0].tolist()
-
-        result    = int(prediction[0])
-        prob_fail = round(probability[0] * 100, 2)
-        prob_pass = round(probability[1] * 100, 2)
-
-        # Danh gia muc do rui ro
-        if prob_pass >= 80:
-            risk_level = "Thap"
-            advice = "Sinh vien dang hoc tap tot, hay duy tri phong do!"
-        elif prob_pass >= 60:
-            risk_level = "Trung binh"
-            advice = "Sinh vien can co gang hon, dac biet chu y diem giua ky va chuyen can."
-        elif prob_pass >= 40:
-            risk_level = "Cao"
-            advice = "Canh bao: Sinh vien co nguy co truot mon. Can tang cuong hoc tap ngay!"
-        else:
-            risk_level = "Rat cao"
-            advice = "Nguy hiem: Sinh vien can can thiep khan cap tu giang vien va co van hoc tap."
+        # Bien phap ensemble
+        consensus_label, is_agree = majority_vote(dt_result["prediction"], nb_result["prediction"])
+        consensus_info = LEVEL_INFO[consensus_label]
 
         return {
-            "prediction":      result,
-            "probability":     probability,
-            "prob_pass":       prob_pass,
-            "prob_fail":       prob_fail,
-            "risk_level":      risk_level,
-            "advice":          advice,
-            "chuyen_can_auto": chuyen_can_auto,
+            # Ket qua tong hop (hien len UI chinh)
+            "prediction":  consensus_label,
+            "ten_muc":     consensus_info["ten"],
+            "mau":         consensus_info["mau"],
+            "canh_bao":    consensus_info["canh_bao"],
+            "loi_khuyen":  consensus_info["loi_khuyen"],
+            "dong_thuan":  is_agree,
+
+            # Ket qua chi tiet tung thuat toan
+            "decision_tree": {**dt_result, "do_chinh_xac": f"{dt_accuracy}%"},
+            "naive_bayes":   {**nb_result, "do_chinh_xac": f"{nb_accuracy}%"},
+
             "input": {
-                "buoi_vang":  data.buoi_vang,
-                "chuyen_can": chuyen_can_auto,
-                "giua_ky":    data.giua_ky,
-                "cuoi_ky":    data.cuoi_ky,
-                "gioi_tinh":  "Nam" if data.gioi_tinh == 1 else "Nu"
+                "phat_bieu": data.phat_bieu,
+                "tai_lieu":  data.tai_lieu,
+                "thong_bao": data.thong_bao,
+                "nghi_hoc":  "Above-7 (Tren 7 ngay)" if data.nghi_hoc == 1 else "Under-7 (Tu 7 ngay tro xuong)"
             }
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Loi du doan: {str(e)}")
-
-
-@app.post("/predict/batch")
-def predict_batch(students: list[StudentData]):
-    """Dự đoán kết quả cho nhiều sinh viên cùng lúc"""
-    results = []
-    for i, student in enumerate(students):
-        try:
-            result = predict_student(student)
-            result["id"] = i + 1
-            results.append(result)
-        except Exception as e:
-            results.append({"id": i + 1, "error": str(e)})
-    return {"total": len(results), "results": results}
